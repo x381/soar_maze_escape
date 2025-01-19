@@ -1,7 +1,7 @@
 import rospy
 import tf2_ros
 from nav_msgs.srv import GetMap
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Path
 import numpy as np
 import matplotlib.pyplot as plt
 from geometry_msgs.msg import PoseStamped
@@ -335,6 +335,34 @@ def visualize_graph_with_path(wall_positions, robot_position, graph, path):
     plt.show()
 
 
+def publish_path_to_move_base(path):
+    """Publish the path to move_base"""
+    path_publisher = rospy.Publisher(
+        "move_base_simple/goal", PoseStamped, queue_size=10
+    )
+
+    pose_msg = PoseStamped()
+    pose_msg.header.stamp = rospy.Time.now()
+    pose_msg.header.frame_id = "map"
+    pose_msg.pose.orientation.x = 0.0
+    pose_msg.pose.orientation.y = 0.0
+    pose_msg.pose.orientation.z = 0.0
+    pose_msg.pose.orientation.w = 1.0
+
+    # Iterate over all nodes in the path
+    for node in path:
+        # Set the pose
+        pose_msg.pose.position.x = float(node[0])
+        pose_msg.pose.position.y = float(node[1])
+        pose_msg.pose.position.z = 0.0
+        # Publish the path
+        rospy.loginfo(f"Published pose: x={node[0]}, y={node[1]}")
+        path_publisher.publish(pose_msg)
+        # Wait for the robot to reach the pose
+        rospy.sleep(10)
+    rospy.loginfo("Path published successfully")
+
+
 if __name__ == "__main__":
     rospy.init_node("moro_maze_navigation")
 
@@ -373,12 +401,15 @@ if __name__ == "__main__":
         rospy.loginfo("Applying BFS to find path...")
         path = apply_bfs_to_graph(graph, start_position, goal_position)
 
-        if path:
-            rospy.loginfo(f"Path found: {path}")
-        else:
-            rospy.loginfo("No path found")
-
         # Visualize the graph and the path
         visualize_graph_with_path(wall_positions, robot_position, graph, path)
+
+        if path:
+            rospy.loginfo(f"Path found: {path}")
+            # Publish the path to move_base
+            rospy.loginfo("Publishing path to move_base...")
+            publish_path_to_move_base(path)
+        else:
+            rospy.loginfo("No path found")
     else:
         rospy.logerr("Failed to retrieve the map. Exiting.")
