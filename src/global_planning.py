@@ -43,23 +43,17 @@ def deserialize_map(map_data):
     return np.array(free_space), np.array(walls)
 
 
-def world_to_map(x_world, y_world, map_data):
+def world_to_map(x_world, y_world, resolution):
     """Convert world coordinates to map coordinates"""
-    resolution = map_data.info.resolution
-    origin_x = map_data.info.origin.position.x
-    origin_y = map_data.info.origin.position.y
-    x_map = int((x_world - origin_x) / resolution)
-    y_map = int((y_world - origin_y) / resolution)
+    x_map = int((x_world) / resolution) * resolution
+    y_map = int((y_world) / resolution) * resolution
     return x_map, y_map
 
 
-def map_to_world(x_map, y_map, map_data):
+def map_to_world(x_map, y_map, resolution):
     """Convert map coordinates to world coordinates"""
-    resolution = map_data.info.resolution
-    origin_x = map_data.info.origin.position.x
-    origin_y = map_data.info.origin.position.y
-    x_world = x_map * resolution + origin_x
-    y_world = y_map * resolution + origin_y
+    x_world = x_map * resolution
+    y_world = y_map * resolution
     return x_world, y_world
 
 
@@ -131,29 +125,27 @@ def visualize_map(free_positions, wall_positions, robot_position):
     plt.show()
 
 
-def create_graph(free_positions, wall_positions, resolution, step_size=1):
+def create_graph(free_positions, wall_positions, map_data, step_size=1):
     """Create a graph representation of the map"""
     graph = {}
     discrete_free_positions = set(
         map(
-            lambda pos: (
-                round(pos[0] / step_size) * step_size,
-                round(pos[1] / step_size) * step_size,
+            lambda pos: map_to_world(
+                *world_to_map(pos[0], pos[1], step_size), step_size
             ),
             free_positions,
         )
     )
     wall_set = set(
         map(
-            lambda pos: (
-                round(pos[0] / resolution) * resolution,
-                round(pos[1] / resolution) * resolution,
+            lambda pos: map_to_world(
+                *world_to_map(pos[0], pos[1], map_data.info.resolution),
+                map_data.info.resolution,
             ),
             wall_positions,
         )
     )
 
-    # Create graph nodes and edges
     for position in discrete_free_positions:
         x, y = position
         neighbors = [
@@ -165,26 +157,26 @@ def create_graph(free_positions, wall_positions, resolution, step_size=1):
         valid_neighbors = []
         for neighbor in neighbors:
             if neighbor in discrete_free_positions and not is_wall_between(
-                position, neighbor, wall_set, resolution
+                position, neighbor, wall_set, map_data
             ):
                 valid_neighbors.append((neighbor, step_size))
         graph[position] = valid_neighbors
     return graph
 
 
-def is_wall_between(start, end, wall_set, resolution):
+def is_wall_between(start, end, wall_set, map_data):
     """Check if there's a wall between two points"""
     dx = end[0] - start[0]
     dy = end[1] - start[1]
     distance = ((dx**2) + (dy**2)) ** 0.5
-    steps = int(distance / (resolution / 2))
+    steps = int(distance / (map_data.info.resolution / 2))
 
     for i in range(1, steps):
         check_x = start[0] + dx * i / steps
         check_y = start[1] + dy * i / steps
-        check_point = (
-            round(check_x / resolution) * resolution,
-            round(check_y / resolution) * resolution,
+        check_point = map_to_world(
+            *world_to_map(check_x, check_y, map_data.info.resolution),
+            map_data.info.resolution,
         )
         if check_point in wall_set:
             return True
@@ -386,35 +378,31 @@ if __name__ == "__main__":
         # visualize_map(free_positions, wall_positions, robot_position)
 
         # GRAPH CREATION
-        rospy.loginfo("Creating graph...")
-        graph = create_graph(
-            free_positions, wall_positions, map_data.info.resolution, step_size=1
-        )
+        # rospy.loginfo("Creating graph...")
+        # graph = create_graph(free_positions, wall_positions, map_data, step_size=1)
 
-        rospy.loginfo("Visualizing the graph...")
-        visualize_graph(wall_positions, robot_position, graph)
+        # rospy.loginfo("Visualizing the graph...")
+        # visualize_graph(wall_positions, robot_position, graph)
 
         # # PATH RECONSTRUCTION
-        # graph = create_graph(
-        #     free_positions, wall_positions, map_data.info.resolution, step_size=1
-        # )
+        graph = create_graph(free_positions, wall_positions, map_data, step_size=1)
 
-        # # Define start and goal positions
-        # start_position = (2, 1)
-        # goal_position = (3, 3)
+        # Define start and goal positions
+        start_position = (2, 1)
+        goal_position = (3, 3)
 
-        # rospy.loginfo("Applying BFS to find path...")
-        # path = apply_bfs_to_graph(graph, start_position, goal_position)
+        rospy.loginfo("Applying BFS to find path...")
+        path = apply_bfs_to_graph(graph, start_position, goal_position)
 
-        # # Visualize the graph and the path
-        # visualize_graph_with_path(wall_positions, robot_position, graph, path)
+        # Visualize the graph and the path
+        visualize_graph_with_path(wall_positions, robot_position, graph, path)
 
-        # if path:
-        #     rospy.loginfo(f"Path found: {path}")
-        #     # Publish the path to move_base
-        #     rospy.loginfo("Publishing path to move_base...")
-        #     publish_path_to_move_base(path)
-        # else:
-        #     rospy.loginfo("No path found")
+        if path:
+            rospy.loginfo(f"Path found: {path}")
+            # Publish the path to move_base
+            rospy.loginfo("Publishing path to move_base...")
+            publish_path_to_move_base(path)
+        else:
+            rospy.loginfo("No path found")
     else:
         rospy.logerr("Failed to retrieve the map. Exiting.")
