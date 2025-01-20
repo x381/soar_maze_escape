@@ -17,44 +17,50 @@ COLOUR_SCHEME = {
 }
 
 
-class MapProcessor:
-    def __init__(self, map_data: OccupancyGrid):
-        self.width = map_data.info.width
-        self.height = map_data.info.height
-        self.resolution = map_data.info.resolution
-        self.origin_x = map_data.info.origin.position.x
-        self.origin_y = map_data.info.origin.position.y
-        self.grid = np.array(map_data.data).reshape((self.height, self.width))
+def deserialize_map(map_data):
+    """Convert map data into free space and wall coordinates"""
+    width = map_data.info.width
+    height = map_data.info.height
+    resolution = map_data.info.resolution
+    origin_x = map_data.info.origin.position.x
+    origin_y = map_data.info.origin.position.y
+    grid = np.array(map_data.data).reshape((height, width))
 
-    def deserialize_map(self):
-        """Convert map data into free space and wall coordinates"""
-        free_space = []
-        walls = []
+    free_space = []
+    walls = []
 
-        for y in range(self.height):
-            for x in range(self.width):
-                value = self.grid[y, x]
-                world_x = x * self.resolution + self.origin_x
-                world_y = y * self.resolution + self.origin_y
+    for y in range(height):
+        for x in range(width):
+            value = grid[y, x]
+            world_x = x * resolution + origin_x
+            world_y = y * resolution + origin_y
 
-                if value == 0:
-                    free_space.append((world_x, world_y))
-                elif value == 100:
-                    walls.append((world_x, world_y))
+            if value == 0:
+                free_space.append((world_x, world_y))
+            elif value == 100:
+                walls.append((world_x, world_y))
 
-        return np.array(free_space), np.array(walls)
+    return np.array(free_space), np.array(walls)
 
-    def world_to_map(self, x_world: float, y_world: float):
-        """Convert world coordinates to map coordinates"""
-        x_map = int((x_world - self.origin_x) / self.resolution)
-        y_map = int((y_world - self.origin_y) / self.resolution)
-        return x_map, y_map
 
-    def map_to_world(self, x_map: int, y_map: int):
-        """Convert map coordinates to world coordinates"""
-        x_world = x_map * self.resolution + self.origin_x
-        y_world = y_map * self.resolution + self.origin_y
-        return x_world, y_world
+def world_to_map(x_world, y_world, map_data):
+    """Convert world coordinates to map coordinates"""
+    resolution = map_data.info.resolution
+    origin_x = map_data.info.origin.position.x
+    origin_y = map_data.info.origin.position.y
+    x_map = int((x_world - origin_x) / resolution)
+    y_map = int((y_world - origin_y) / resolution)
+    return x_map, y_map
+
+
+def map_to_world(x_map, y_map, map_data):
+    """Convert map coordinates to world coordinates"""
+    resolution = map_data.info.resolution
+    origin_x = map_data.info.origin.position.x
+    origin_y = map_data.info.origin.position.y
+    x_world = x_map * resolution + origin_x
+    y_world = y_map * resolution + origin_y
+    return x_world, y_world
 
 
 def get_map_from_ros():
@@ -372,8 +378,7 @@ if __name__ == "__main__":
     if map_data is not None:
         rospy.loginfo("Map retrieved successfully. Processing...")
 
-        map_processor = MapProcessor(map_data)
-        free_positions, wall_positions = map_processor.deserialize_map()
+        free_positions, wall_positions = deserialize_map(map_data)
         robot_position = get_robot_position()
 
         # MAP VISUALIZATION
@@ -381,35 +386,35 @@ if __name__ == "__main__":
         # visualize_map(free_positions, wall_positions, robot_position)
 
         # GRAPH CREATION
-        # rospy.loginfo("Creating graph...")
-        # graph = create_graph(
-        #     free_positions, wall_positions, map_data.info.resolution, step_size=1
-        # )
-
-        # rospy.loginfo("Visualizing the graph...")
-        # visualize_graph(wall_positions, robot_position, graph)
-
-        # # PATH RECONSTRUCTION
+        rospy.loginfo("Creating graph...")
         graph = create_graph(
             free_positions, wall_positions, map_data.info.resolution, step_size=1
         )
 
-        # Define start and goal positions
-        start_position = (2, 1)
-        goal_position = (3, 3)
+        rospy.loginfo("Visualizing the graph...")
+        visualize_graph(wall_positions, robot_position, graph)
 
-        rospy.loginfo("Applying BFS to find path...")
-        path = apply_bfs_to_graph(graph, start_position, goal_position)
+        # # PATH RECONSTRUCTION
+        # graph = create_graph(
+        #     free_positions, wall_positions, map_data.info.resolution, step_size=1
+        # )
 
-        # Visualize the graph and the path
-        visualize_graph_with_path(wall_positions, robot_position, graph, path)
+        # # Define start and goal positions
+        # start_position = (2, 1)
+        # goal_position = (3, 3)
 
-        if path:
-            rospy.loginfo(f"Path found: {path}")
-            # Publish the path to move_base
-            rospy.loginfo("Publishing path to move_base...")
-            publish_path_to_move_base(path)
-        else:
-            rospy.loginfo("No path found")
+        # rospy.loginfo("Applying BFS to find path...")
+        # path = apply_bfs_to_graph(graph, start_position, goal_position)
+
+        # # Visualize the graph and the path
+        # visualize_graph_with_path(wall_positions, robot_position, graph, path)
+
+        # if path:
+        #     rospy.loginfo(f"Path found: {path}")
+        #     # Publish the path to move_base
+        #     rospy.loginfo("Publishing path to move_base...")
+        #     publish_path_to_move_base(path)
+        # else:
+        #     rospy.loginfo("No path found")
     else:
         rospy.logerr("Failed to retrieve the map. Exiting.")
