@@ -50,4 +50,4 @@ The robot utilizes Breadth-First Search (BFS) to find a path from its current po
 
 Here's a flowchart of our global planning implementation
 
-![Flowchart of the project](./flowchart.png)
+![Flowchart of our global planning implementation](./global_planning_flowchart.png)
